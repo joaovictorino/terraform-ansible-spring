@@ -1,0 +1,168 @@
+---
+- hosts: mysqlserver
+  tasks:
+    - name: "Instalar MySQL"
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+        name: ["mysql-server-5.7", "python3-pymysql"]
+        state: latest
+      become: yes
+    
+    - name: "Garantir serviço MySQL rodando"
+      service:
+        name: mysql
+        state: started
+        enabled: True
+      become: yes
+      
+    - name: "Alterar a senha do root MySQL"
+      mysql_user:
+        name: root
+        host: "{{ item }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        password: "teste123456"
+        priv: '*.*:ALL,GRANT'
+        check_implicit_admin: true
+      loop: ["10.80.4.12", "127.0.0.1", "::1", "localhost"]
+      become: yes
+      notify:
+        - restart mysql
+
+    - name: "Criar arquivo de credenciais do root"
+      template:
+        src:  my.cnf.j2
+        dest: /root/.my.cnf
+        owner: root
+        mode: 0600
+      become: yes
+      notify:
+        - restart mysql
+
+    - name: "Criar usuário banco de dados"
+      mysql_user: 
+        login_user: root
+        login_password: "teste123456"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        name: "petclinic"
+        password: "petclinic"
+        priv: "*.*:ALL"
+        host: "%"
+        state: present
+
+    - name: "Criar banco de dados"
+      mysql_db:
+        login_user: root
+        login_password: "teste123456"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        name: "petclinic"
+        state: present
+      become: yes
+
+    - name: "Verificar banco"
+      community.mysql.mysql_query:
+        login_user: root
+        login_password: "teste123456"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        login_db: "petclinic"
+        query: "SELECT * FROM vets"
+      register: verificar_banco
+      changed_when: false
+      ignore_errors: true
+
+    - name: "Copiar scripts de banco"
+      copy:
+        src: "files/script"
+        dest: "~"
+      become: yes
+      when: verificar_banco is failed
+
+    - name: "Criar tabelas no banco"
+      mysql_db:
+        login_user: root
+        login_password: "teste123456"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        state: import
+        name: "petclinic"
+        target: "~/script/schema.sql"
+      when: verificar_banco is failed
+
+    - name: "Popular tabelas no banco"
+      mysql_db:
+        login_user: root
+        login_password: "teste123456"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        state: import
+        name: "petclinic"
+        target: "~/script/data.sql"
+      when: verificar_banco is failed
+
+    - name: "Configurar MySQL para aceitar conexões remotas"
+      copy:
+        src: "files/mysqld.cnf"
+        dest: "/etc/mysql/mysql.conf.d/mysqld.cnf"
+      become: yes
+      run_once: true
+      notify:
+        - restart mysql
+
+  handlers:
+    - name: restart mysql
+      service:
+        name: mysql
+        state: restarted
+      become: yes
+
+- hosts: springapp
+  tasks:
+    - name: "Instalar java e unzip"
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+        name: ["openjdk-11-jre", "unzip"]
+        state: latest
+      become: yes
+    
+    - name: "Copiar aplicação"
+      copy:
+        src: "files/springapp.zip"
+        dest: "~/springapp.zip"
+      become: yes
+
+    - name: "Desempacotar aplicação"
+      unarchive:
+        src: "~/springapp.zip"
+        dest: "/srv"
+        remote_src: yes
+        creates: /srv/classes
+      become: yes
+
+    - name: "Verificar aplicação"
+      shell: "curl http://localhost:8080"
+      register: curl_app
+      changed_when: false
+      ignore_errors: true
+
+    - name: "Criar pasta logs springapp"
+      file:
+        path: /var/log/springapp
+        state: directory
+      when: curl_app is failed
+      become: yes
+      
+    - name: "Copiar serviço spring"
+      copy:
+        src: "files/springapp.service"
+        dest: "/etc/systemd/system/springapp.service"
+      when: curl_app is failed
+      become: yes
+
+    - name: "Iniciar serviço"
+      shell: "systemctl start springapp.service"
+      when: curl_app is failed
+      become: yes
+
+    - name: "Habilitar serviço"
+      shell: "systemctl enable springapp.service"
+      when: curl_app is failed
+      become: yes
