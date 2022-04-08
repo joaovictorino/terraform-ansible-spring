@@ -85,6 +85,28 @@ EOF
     depends_on = [ time_sleep.wait_30_seconds ]
 }
 
+resource "local_file" "java-service" {
+    filename = "./ansible/files/springapp.service"
+    content     = <<EOF
+[Unit]
+Description=spring app service
+
+[Service]
+User=${var.user}
+WorkingDirectory=/srv
+ExecStart=/usr/bin/java -Dspring.profiles.active=mysql -jar spring-petclinic-2.4.0.BUILD-SNAPSHOT.jar
+StandardOutput=file:/var/log/springapp/springapp.out.txt
+StandardError=file:/var/log/springapp/springapp.err.txt
+Type=simple
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    depends_on = [ time_sleep.wait_30_seconds ]
+}
+
 resource "null_resource" "upload" {
     provisioner "file" {
         connection {
@@ -115,7 +137,23 @@ resource "null_resource" "deploy" {
             "sudo apt-get update",
             "sudo apt-add-repository --yes --update ppa:ansible/ansible",
             "sudo apt-get -y install python3 ansible",
-            "ansible-galaxy collection install 'community.mysql:==1.1.1'",
+            "ansible-galaxy collection install 'community.mysql:==1.1.1'"
+        ]
+    }
+}
+
+resource "null_resource" "run" {
+    triggers = {
+        order = null_resource.deploy.id
+    }
+    provisioner "remote-exec" {
+        connection {
+            type = "ssh"
+            user = var.user
+            password = var.password
+            host = data.azurerm_public_ip.ip_aula_ansible_data.ip_address
+        }
+        inline = [
             "ansible-playbook -i /home/${var.user}/ansible/hosts /home/${var.user}/ansible/main.yml"
         ]
     }
