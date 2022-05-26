@@ -1,5 +1,11 @@
+resource "random_string" "random_db" {
+  length           = 20
+  upper            = false
+  special          = false
+}
+
 resource "azurerm_storage_account" "storage_aula_db" {
-    name                        = "storageauladb"
+    name                        = random_string.random_db.result
     resource_group_name         = azurerm_resource_group.rg_aula.name
     location                    = var.location
     account_tier                = "Standard"
