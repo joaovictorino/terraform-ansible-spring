@@ -42,8 +42,3 @@ resource "azurerm_network_interface_security_group_association" "nicsq_aula_ansi
     depends_on = [  azurerm_network_interface.nic_aula_ansible, 
                     azurerm_network_security_group.sg_aula ]
 }
-
-data "azurerm_public_ip" "ip_aula_ansible_data" {
-  name                = azurerm_public_ip.publicip_aula_ansible.name
-  resource_group_name = azurerm_resource_group.rg_aula.name
-}
