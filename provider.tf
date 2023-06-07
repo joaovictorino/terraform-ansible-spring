@@ -15,16 +15,16 @@ provider "azurerm" {
 }
 
 resource "random_string" "random_rg" {
-  length           = 4
-  upper            = false
-  special          = false
+  length  = 4
+  upper   = false
+  special = false
 }
 
 resource "azurerm_resource_group" "rg_aula" {
-    name     = "myResourceGroup${random_string.random_rg.result}"
-    location = var.location
+  name     = "myResourceGroup${random_string.random_rg.result}"
+  location = var.location
 
-    tags = {
-        environment = "aula infra"
-    }
+  tags = {
+    environment = "aula infra"
+  }
 }
